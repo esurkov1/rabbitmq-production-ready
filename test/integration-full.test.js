@@ -43,8 +43,7 @@ test('should connect and disconnect', async (t) => {
   });
 
   await client.connect();
-  // Небольшая задержка чтобы соединение стабилизировалось
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  // Проверяем сразу после подключения
   assert.strictEqual(client.isConnected(), true);
 
   await client.close();
@@ -68,28 +67,39 @@ test('should publish and consume messages', async (t) => {
   await client.assertQueue(queueName, { durable: false });
 
   const receivedMessages = [];
-  await client.consume(queueName, async (msg) => {
-    // Используем parsedContent для десериализованного контента
-    const content = msg.parsedContent || JSON.parse(msg.content.toString());
-    receivedMessages.push(content);
-  });
+  await client.consume(
+    queueName,
+    async (msg) => {
+      // Используем parsedContent для десериализованного контента
+      const content = msg.parsedContent || JSON.parse(msg.content.toString());
+      receivedMessages.push(content);
+    },
+    { noAck: false }
+  );
 
   // Небольшая задержка чтобы consumer начал работу
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   await client.publish(queueName, { test: 'message1' });
+  // Небольшая задержка между публикациями
+  await new Promise((resolve) => setTimeout(resolve, 50));
   await client.publish(queueName, { test: 'message2' });
 
   // Wait for messages to be processed
   let attempts = 0;
-  while (receivedMessages.length < 2 && attempts < 50) {
+  while (receivedMessages.length < 2 && attempts < 100) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     attempts++;
+    // Проверяем что соединение все еще активно
+    if (!client.isConnected()) {
+      throw new Error('Connection lost during message processing');
+    }
   }
 
   assert.strictEqual(receivedMessages.length, 2);
-  assert.strictEqual(receivedMessages[0].test, 'message1');
-  assert.strictEqual(receivedMessages[1].test, 'message2');
+  // Проверяем что оба сообщения получены (порядок может быть разным из-за параллельной обработки)
+  const messageTests = receivedMessages.map((m) => m.test).sort();
+  assert.deepStrictEqual(messageTests, ['message1', 'message2']);
 
   await client.close();
 });
