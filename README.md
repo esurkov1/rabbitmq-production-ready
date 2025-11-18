@@ -36,6 +36,8 @@ Production-ready RabbitMQ client for Node.js with auto-reconnect, retry logic, D
 - ✅ **Health checks** - Integration-ready health endpoints
 - ✅ **Graceful shutdown** - Clean application termination
 - ✅ **Correlation IDs** - Track messages across services
+- ✅ **Distributed Tracing** - End-to-end trace ID propagation
+- ✅ **Custom Serialization** - Flexible message encoding/decoding
 - ✅ **TypeScript** support - Full type definitions included
 - ✅ **Hooks** for Prometheus integration - Export metrics easily
 - ✅ **Event-driven** - React to connection changes
@@ -84,7 +86,8 @@ async function main() {
 
     // 5. Consume messages
     await client.consume('my_queue', async (msg) => {
-      const content = JSON.parse(msg.content.toString());
+      // Use parsedContent for automatically deserialized message
+      const content = msg.parsedContent || JSON.parse(msg.content.toString());
       console.log('📨 Received:', content);
 
       // Your business logic here
@@ -156,6 +159,41 @@ const client = new RabbitMQClient(process.env.AMQP_URL, {
 
   // Graceful shutdown timeout
   shutdownTimeout: 10000,
+
+  // Custom serialization
+  serializer: (message) => {
+    // Custom serialization logic
+    // Default: JSON.stringify for objects, Buffer.from for strings
+    return Buffer.from(JSON.stringify(message));
+  },
+  deserializer: (buffer) => {
+    // Custom deserialization logic
+    // Default: JSON.parse with fallback to string
+    try {
+      return JSON.parse(buffer.toString());
+    } catch (e) {
+      return buffer.toString();
+    }
+  },
+
+  // Distributed tracing
+  tracing: {
+    enabled: true, // Enable trace ID propagation
+    headerName: 'x-trace-id', // Header name for trace ID
+    correlationIdHeader: 'x-correlation-id', // Header name for correlation ID
+    getTraceContext: () => {
+      // Get trace ID from async context (e.g., AsyncLocalStorage)
+      return null; // Return trace ID or null
+    },
+    setTraceContext: (traceId) => {
+      // Set trace ID in async context
+      // Called automatically when consuming messages
+    },
+    generateTraceId: () => {
+      // Custom trace ID generator (default: timestamp + random)
+      return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    },
+  },
 
   // Prometheus metrics hooks
   hooks: {
@@ -231,16 +269,18 @@ init().catch(console.error);
 
 ### Comparison
 
-| Feature           | Standard Client | This Library |
-| ----------------- | --------------- | ------------ |
-| Auto-reconnect    | ❌              | ✅           |
-| Retry logic       | ❌              | ✅           |
-| DLQ support       | Manual          | ✅ Built-in  |
-| Metrics           | ❌              | ✅           |
-| Health checks     | ❌              | ✅           |
-| Graceful shutdown | Manual          | ✅ Automatic |
-| Correlation IDs   | Manual          | ✅ Automatic |
-| TypeScript        | ❌              | ✅           |
+| Feature              | Standard Client | This Library |
+| -------------------- | --------------- | ------------ |
+| Auto-reconnect       | ❌              | ✅           |
+| Retry logic          | ❌              | ✅           |
+| DLQ support          | Manual          | ✅ Built-in  |
+| Metrics              | ❌              | ✅           |
+| Health checks        | ❌              | ✅           |
+| Graceful shutdown    | Manual          | ✅ Automatic |
+| Correlation IDs      | Manual          | ✅ Automatic |
+| Distributed Tracing  | ❌              | ✅ Built-in  |
+| Custom Serialization | ❌              | ✅ Flexible  |
+| TypeScript           | ❌              | ✅           |
 
 ## Core Concepts
 
@@ -317,6 +357,74 @@ const client = new RabbitMQClient('amqp://localhost', {
 await client.assertQueue('orders', { dlq: true });
 
 // Failed messages automatically go to 'dlq.orders'
+```
+
+### 6. Message Serialization
+
+Custom serialization for flexible message encoding:
+
+```javascript
+const client = new RabbitMQClient('amqp://localhost', {
+  // Custom serializer (default: JSON.stringify for objects)
+  serializer: (message) => {
+    if (Buffer.isBuffer(message)) return message;
+    if (typeof message === 'string') return Buffer.from(message);
+    // Use MessagePack, Avro, or any other format
+    return Buffer.from(JSON.stringify(message));
+  },
+
+  // Custom deserializer (default: JSON.parse)
+  deserializer: (buffer) => {
+    try {
+      return JSON.parse(buffer.toString());
+    } catch (e) {
+      return buffer.toString();
+    }
+  },
+});
+
+// Publish - automatically serialized
+await client.publish('queue', { data: 'test' });
+
+// Consume - automatically deserialized in msg.parsedContent
+await client.consume('queue', async (msg) => {
+  const data = msg.parsedContent; // Already deserialized!
+  console.log(data); // { data: 'test' }
+});
+```
+
+### 7. Distributed Tracing
+
+End-to-end trace ID propagation across services:
+
+```javascript
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+
+const client = new RabbitMQClient('amqp://localhost', {
+  tracing: {
+    enabled: true,
+    headerName: 'x-trace-id', // Header name for trace ID
+    correlationIdHeader: 'x-correlation-id', // Header name for correlation ID
+    getTraceContext: () => asyncLocalStorage.getStore()?.traceId,
+    setTraceContext: (traceId) => {
+      asyncLocalStorage.enterWith({ traceId });
+    },
+  },
+});
+
+// Set trace context before publishing
+asyncLocalStorage.run({ traceId: 'trace-123' }, async () => {
+  await client.publish('queue', { data: 'test' });
+  // Trace ID automatically added to message headers
+});
+
+// Consume - trace context automatically restored
+await client.consume('queue', async (msg) => {
+  // Trace context is automatically set from message headers
+  const currentTraceId = asyncLocalStorage.getStore()?.traceId;
+  console.log('Processing with trace:', currentTraceId);
+});
 ```
 
 ## Configuration Guide
@@ -864,6 +972,146 @@ client.resetMetrics();
 
 ## Advanced Usage
 
+### Custom Serialization
+
+Use MessagePack, Avro, or any other serialization format:
+
+```javascript
+const msgpack = require('msgpack-lite');
+
+const client = new RabbitMQClient('amqp://localhost', {
+  serializer: (message) => {
+    if (Buffer.isBuffer(message)) return message;
+    if (typeof message === 'string') return Buffer.from(message);
+    return msgpack.encode(message);
+  },
+  deserializer: (buffer) => {
+    try {
+      return msgpack.decode(buffer);
+    } catch (e) {
+      return buffer.toString();
+    }
+  },
+});
+
+// Publish - automatically MessagePack encoded
+await client.publish('queue', { data: 'test' });
+
+// Consume - automatically MessagePack decoded
+await client.consume('queue', async (msg) => {
+  const data = msg.parsedContent; // Already decoded!
+});
+```
+
+### Distributed Tracing with AsyncLocalStorage
+
+Full trace context propagation:
+
+```javascript
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+
+const client = new RabbitMQClient('amqp://localhost', {
+  tracing: {
+    enabled: true,
+    headerName: 'x-trace-id',
+    correlationIdHeader: 'x-correlation-id',
+    getTraceContext: () => asyncLocalStorage.getStore()?.traceId,
+    setTraceContext: (traceId) => {
+      asyncLocalStorage.enterWith({ traceId });
+    },
+  },
+});
+
+// Service A: Set trace context and publish
+asyncLocalStorage.run({ traceId: 'trace-abc-123' }, async () => {
+  await client.publish('orders', { orderId: 123 });
+  // Trace ID 'trace-abc-123' automatically added to headers
+});
+
+// Service B: Consume and trace context is restored
+await client.consume('orders', async (msg) => {
+  // Trace context automatically set from headers
+  const traceId = asyncLocalStorage.getStore()?.traceId;
+  console.log(`Processing order with trace: ${traceId}`);
+
+  // All logs and downstream calls will have the same trace ID
+  await processOrder(msg.parsedContent);
+});
+```
+
+### Trace ID Auto-Generation
+
+If trace ID is not provided, it's automatically generated:
+
+```javascript
+const client = new RabbitMQClient('amqp://localhost', {
+  tracing: {
+    enabled: true,
+    // If getTraceContext returns null, trace ID is auto-generated
+    getTraceContext: () => null,
+    generateTraceId: () => {
+      // Custom generator (default: timestamp + random)
+      return `trace-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    },
+  },
+});
+
+// Publish without explicit trace context
+await client.publish('queue', { data: 'test' });
+// Trace ID automatically generated and added to headers
+```
+
+### Correlation ID Management
+
+Correlation IDs are automatically generated and propagated:
+
+```javascript
+// Correlation ID is automatically generated for each message
+await client.publish('queue', { data: 'test' });
+// Header 'x-correlation-id' automatically added
+
+// Or provide custom correlation ID
+await client.publish(
+  'queue',
+  { data: 'test' },
+  {
+    correlationId: 'custom-correlation-id',
+  }
+);
+
+// Correlation ID is preserved through retries and DLQ
+```
+
+### Combining Serialization and Tracing
+
+Use both features together:
+
+```javascript
+const client = new RabbitMQClient('amqp://localhost', {
+  // Custom serialization
+  serializer: (msg) => Buffer.from(JSON.stringify(msg)),
+  deserializer: (buf) => JSON.parse(buf.toString()),
+
+  // Distributed tracing
+  tracing: {
+    enabled: true,
+    getTraceContext: () => getCurrentTraceId(),
+    setTraceContext: (traceId) => setCurrentTraceId(traceId),
+  },
+});
+
+// Publish with automatic serialization and trace ID
+await client.publish('queue', { userId: 123, action: 'created' });
+
+// Consume with automatic deserialization and trace context
+await client.consume('queue', async (msg) => {
+  const data = msg.parsedContent; // Deserialized
+  const traceId = getCurrentTraceId(); // Trace context set
+  console.log(`Processing ${data.action} with trace ${traceId}`);
+});
+```
+
 ### Custom Correlation ID Generator
 
 ```javascript
@@ -1058,6 +1306,107 @@ app.get('/health', async (req, res) => {
 process.on('SIGTERM', async () => {
   await client.close();
   process.exit(0);
+});
+```
+
+## Examples
+
+### Basic Usage with Serialization
+
+```javascript
+const RabbitMQClient = require('rabbitmq-production-ready');
+
+const client = new RabbitMQClient('amqp://localhost');
+
+async function main() {
+  await client.connect();
+  await client.assertQueue('tasks', { durable: true });
+
+  // Publish - automatically serialized
+  await client.publish('tasks', {
+    taskId: 123,
+    type: 'process',
+    data: { userId: 456 },
+  });
+
+  // Consume - automatically deserialized
+  await client.consume('tasks', async (msg) => {
+    const task = msg.parsedContent; // Already parsed!
+    console.log('Processing task:', task.taskId);
+    await processTask(task);
+  });
+}
+
+main().catch(console.error);
+```
+
+### Distributed Tracing Example
+
+```javascript
+const RabbitMQClient = require('rabbitmq-production-ready');
+const { AsyncLocalStorage } = require('async_hooks');
+
+const asyncLocalStorage = new AsyncLocalStorage();
+
+const client = new RabbitMQClient('amqp://localhost', {
+  tracing: {
+    enabled: true,
+    headerName: 'x-trace-id',
+    correlationIdHeader: 'x-correlation-id',
+    getTraceContext: () => asyncLocalStorage.getStore()?.traceId,
+    setTraceContext: (traceId) => {
+      asyncLocalStorage.enterWith({ traceId });
+    },
+  },
+});
+
+// Producer service
+async function publishOrder(order) {
+  // Set trace context
+  asyncLocalStorage.run({ traceId: generateTraceId() }, async () => {
+    await client.publish('orders', order);
+    // Trace ID automatically propagated
+  });
+}
+
+// Consumer service
+async function startConsumer() {
+  await client.consume('orders', async (msg) => {
+    // Trace context automatically restored from headers
+    const traceId = asyncLocalStorage.getStore()?.traceId;
+    console.log(`Processing order with trace: ${traceId}`);
+
+    const order = msg.parsedContent;
+    await processOrder(order);
+  });
+}
+```
+
+### Custom Serialization with MessagePack
+
+```javascript
+const RabbitMQClient = require('rabbitmq-production-ready');
+const msgpack = require('msgpack-lite');
+
+const client = new RabbitMQClient('amqp://localhost', {
+  serializer: (message) => {
+    if (Buffer.isBuffer(message)) return message;
+    if (typeof message === 'string') return Buffer.from(message);
+    return msgpack.encode(message);
+  },
+  deserializer: (buffer) => {
+    try {
+      return msgpack.decode(buffer);
+    } catch (e) {
+      return buffer.toString();
+    }
+  },
+});
+
+// Use as normal - serialization is transparent
+await client.publish('queue', { data: 'test' });
+await client.consume('queue', async (msg) => {
+  const data = msg.parsedContent; // MessagePack decoded
 });
 ```
 
