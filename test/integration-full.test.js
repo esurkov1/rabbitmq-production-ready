@@ -43,6 +43,8 @@ test('should connect and disconnect', async (t) => {
   });
 
   await client.connect();
+  // Небольшая задержка чтобы соединение стабилизировалось
+  await new Promise((resolve) => setTimeout(resolve, 100));
   assert.strictEqual(client.isConnected(), true);
 
   await client.close();
@@ -71,6 +73,9 @@ test('should publish and consume messages', async (t) => {
     const content = msg.parsedContent || JSON.parse(msg.content.toString());
     receivedMessages.push(content);
   });
+
+  // Небольшая задержка чтобы consumer начал работу
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   await client.publish(queueName, { test: 'message1' });
   await client.publish(queueName, { test: 'message2' });
@@ -123,6 +128,9 @@ test('should handle retry on consume error', async (t) => {
     },
     { maxRetries: 2 }
   );
+
+  // Небольшая задержка чтобы consumer начал работу
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   await client.publish(queueName, { test: 'retry' });
 
@@ -301,6 +309,9 @@ test('should use custom serializer/deserializer', async (t) => {
     receivedMessages.push(msg.parsedContent);
   });
 
+  // Небольшая задержка чтобы consumer начал работу
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   await client.publish(queueName, { test: 'custom' });
 
   // Wait for message to be processed
@@ -353,6 +364,9 @@ test('should propagate trace ID through messages', async (t) => {
     receivedCorrelationId = msg.properties.headers['x-correlation-id'];
     messageProcessed = true;
   });
+
+  // Небольшая задержка чтобы consumer начал работу
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   // Устанавливаем trace context перед публикацией
   const originalTraceId = 'trace-12345';
@@ -414,6 +428,9 @@ test('should set trace context from message headers', async (t) => {
     assert.strictEqual(currentTraceId, 'trace-from-header');
     messageProcessed = true;
   });
+
+  // Небольшая задержка чтобы consumer начал работу
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   // Публикуем с trace ID в заголовках
   await client.publish(
