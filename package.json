@@ -1,0 +1,60 @@
+{
+  "name": "rabbitmq-production-ready",
+  "version": "1.0.0",
+  "description": "Production-ready RabbitMQ client with auto-reconnect, retry logic, DLQ support, metrics, and health checks",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:watch": "node --test --watch test/*.test.js",
+    "lint": "eslint lib/**/*.js test/**/*.js examples/**/*.js",
+    "lint:fix": "eslint lib/**/*.js test/**/*.js examples/**/*.js --fix",
+    "format": "prettier --write \"**/*.{js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{js,json,md}\"",
+    "type-check": "tsc --noEmit"
+  },
+  "files": [
+    "lib/",
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "rabbitmq",
+    "amqp",
+    "message-queue",
+    "messaging",
+    "production",
+    "reconnect",
+    "retry",
+    "dlq",
+    "dead-letter-queue",
+    "metrics",
+    "health-check"
+  ],
+  "author": "Eugene Surkov <https://github.com/esurkov1>",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/esurkov1/rabbitmq-production-ready.git"
+  },
+  "bugs": {
+    "url": "https://github.com/esurkov1/rabbitmq-production-ready/issues"
+  },
+  "homepage": "https://github.com/esurkov1/rabbitmq-production-ready#readme",
+  "dependencies": {
+    "amqplib": "^0.10.9",
+    "pino": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.0.0"
+  }
+}
