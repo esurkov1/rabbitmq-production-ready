@@ -638,9 +638,26 @@ await client.publish(
 
 **Message Format:**
 
-- Objects are automatically JSON stringified
-- Strings are sent as-is
+- Objects are automatically serialized using configured `serializer` (default: JSON.stringify)
+- Strings are sent as-is (or through serializer if configured)
 - Buffers are sent as binary
+
+**Serialization:**
+
+Messages are serialized using the `serializer` function configured in the client. By default:
+
+- Objects → JSON stringified
+- Strings → Buffer.from(string)
+- Buffers → Passed through unchanged
+
+You can customize serialization for MessagePack, Avro, Protocol Buffers, or any other format.
+
+**Tracing:**
+
+When tracing is enabled, trace IDs and correlation IDs are automatically added to message headers:
+
+- `x-trace-id` - Distributed trace ID (auto-generated if not provided)
+- `x-correlation-id` - Correlation ID for request tracking
 
 #### `publishToExchange(exchange: string, routingKey: string, message: any, options?: PublishOptions): Promise<boolean>`
 
@@ -670,7 +687,11 @@ Start consuming messages from queue.
 const consumerTag = await client.consume(
   'my_queue',
   async (msg) => {
-    const content = JSON.parse(msg.content.toString());
+    // Option 1: Use parsedContent (automatically deserialized)
+    const content = msg.parsedContent;
+
+    // Option 2: Manual deserialization
+    // const content = JSON.parse(msg.content.toString());
 
     // Process message
     await processMessage(content);
@@ -690,9 +711,23 @@ const consumerTag = await client.consume(
 
 **Handler Function:**
 
-- Receives `msg` object from amqplib
+- Receives `msg` object from amqplib with additional `parsedContent` property
+- `msg.content` - Original Buffer (from RabbitMQ)
+- `msg.parsedContent` - Deserialized content (using configured `deserializer`)
 - If handler succeeds, message is automatically acknowledged
 - If handler throws, message is retried or sent to DLQ based on configuration
+
+**Deserialization:**
+
+Messages are automatically deserialized using the `deserializer` function configured in the client. The result is available in `msg.parsedContent`. By default:
+
+- JSON buffers → Parsed object
+- Non-JSON buffers → String representation
+- Custom deserializers can handle MessagePack, Avro, Protocol Buffers, etc.
+
+**Trace Context:**
+
+When tracing is enabled, the trace context is automatically set from message headers before the handler is called. This enables distributed tracing across services.
 
 **Options:**
 
