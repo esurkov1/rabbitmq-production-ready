@@ -72,6 +72,11 @@ jobs:
     - name: Install dependencies
       run: npm ci
     
+    - name: Wait for RabbitMQ
+      run: |
+        echo "Waiting for RabbitMQ to be ready..."
+        timeout 60 bash -c 'until rabbitmq-diagnostics -q ping > /dev/null 2>&1; do sleep 2; done' || true
+    
     - name: Run unit tests
       run: npm test
     

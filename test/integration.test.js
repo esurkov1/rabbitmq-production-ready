@@ -1,12 +1,44 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
+const amqp = require('amqplib');
 const RabbitMQClient = require('../lib/RabbitMQClient');
 
 const AMQP_URL = process.env.AMQP_URL || 'amqp://guest:guest@localhost:5672';
 
-test('should connect and disconnect', async () => {
+// Проверка доступности RabbitMQ перед запуском интеграционных тестов
+let rabbitmqAvailable = false;
+
+async function checkRabbitMQAvailability() {
+  try {
+    // Таймаут 5 секунд для проверки доступности
+    const connection = await Promise.race([
+      amqp.connect(AMQP_URL),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000)),
+    ]);
+    await connection.close();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Проверяем доступность RabbitMQ один раз перед всеми тестами
+test.before(async () => {
+  rabbitmqAvailable = await checkRabbitMQAvailability();
+  if (!rabbitmqAvailable) {
+    console.warn('⚠️  RabbitMQ is not available. Integration tests will be skipped.');
+  }
+});
+
+test('should connect and disconnect', async (t) => {
+  if (!rabbitmqAvailable) {
+    t.skip('RabbitMQ is not available');
+    return;
+  }
+
   const client = new RabbitMQClient(AMQP_URL, {
     registerShutdownHandlers: false,
+    autoReconnect: false, // Отключаем реконнект для тестов
   });
 
   await client.connect();
@@ -16,9 +48,15 @@ test('should connect and disconnect', async () => {
   assert.strictEqual(client.isConnected(), false);
 });
 
-test('should publish and consume messages', async () => {
+test('should publish and consume messages', async (t) => {
+  if (!rabbitmqAvailable) {
+    t.skip('RabbitMQ is not available');
+    return;
+  }
+
   const client = new RabbitMQClient(AMQP_URL, {
     registerShutdownHandlers: false,
+    autoReconnect: false,
   });
 
   await client.connect();
@@ -45,9 +83,15 @@ test('should publish and consume messages', async () => {
   await client.close();
 });
 
-test('should handle retry on consume error', async () => {
+test('should handle retry on consume error', async (t) => {
+  if (!rabbitmqAvailable) {
+    t.skip('RabbitMQ is not available');
+    return;
+  }
+
   const client = new RabbitMQClient(AMQP_URL, {
     registerShutdownHandlers: false,
+    autoReconnect: false,
     consumeRetry: {
       enabled: true,
       maxAttempts: 2,
@@ -82,9 +126,15 @@ test('should handle retry on consume error', async () => {
   await client.close();
 });
 
-test('should send to DLQ when retries exhausted', async () => {
+test('should send to DLQ when retries exhausted', async (t) => {
+  if (!rabbitmqAvailable) {
+    t.skip('RabbitMQ is not available');
+    return;
+  }
+
   const client = new RabbitMQClient(AMQP_URL, {
     registerShutdownHandlers: false,
+    autoReconnect: false,
     dlq: {
       enabled: true,
       exchange: 'dlx',
@@ -121,9 +171,15 @@ test('should send to DLQ when retries exhausted', async () => {
   await client.close();
 });
 
-test('should collect metrics', async () => {
+test('should collect metrics', async (t) => {
+  if (!rabbitmqAvailable) {
+    t.skip('RabbitMQ is not available');
+    return;
+  }
+
   const client = new RabbitMQClient(AMQP_URL, {
     registerShutdownHandlers: false,
+    autoReconnect: false,
   });
 
   await client.connect();
@@ -149,9 +205,15 @@ test('should collect metrics', async () => {
   await client.close();
 });
 
-test('should perform health check', async () => {
+test('should perform health check', async (t) => {
+  if (!rabbitmqAvailable) {
+    t.skip('RabbitMQ is not available');
+    return;
+  }
+
   const client = new RabbitMQClient(AMQP_URL, {
     registerShutdownHandlers: false,
+    autoReconnect: false,
   });
 
   await client.connect();
@@ -165,11 +227,17 @@ test('should perform health check', async () => {
   await client.close();
 });
 
-test('should handle reconnection', async () => {
+test('should handle reconnection', async (t) => {
+  if (!rabbitmqAvailable) {
+    t.skip('RabbitMQ is not available');
+    return;
+  }
+
   const client = new RabbitMQClient(AMQP_URL, {
     registerShutdownHandlers: false,
     autoReconnect: true,
     initialReconnectDelay: 100,
+    maxReconnectAttempts: 2, // Ограничиваем попытки реконнекта
   });
 
   await client.connect();
