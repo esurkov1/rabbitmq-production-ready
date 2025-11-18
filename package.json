@@ -1,6 +1,6 @@
 {
   "name": "rabbitmq-production-ready",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Production-ready RabbitMQ client with auto-reconnect, retry logic, DLQ support, metrics, and health checks",
   "main": "index.js",
   "types": "index.d.ts",
