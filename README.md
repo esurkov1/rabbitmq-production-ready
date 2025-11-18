@@ -7,7 +7,7 @@
 
 **🇷🇺 [Русская версия документации](README.ru.md)**
 
-Production-ready RabbitMQ client for Node.js with auto-reconnect, retry logic, DLQ support, metrics, health checks, and comprehensive error handling.
+Production-ready RabbitMQ client for Node.js with modular architecture, auto-reconnect, retry logic, DLQ support, metrics, health checks, and comprehensive error handling.
 
 ## Table of Contents
 

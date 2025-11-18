@@ -1,3 +1,4 @@
-export * from './lib/RabbitMQClient';
-export { RabbitMQClient as default } from './lib/RabbitMQClient';
+import RabbitMQClient = require('./lib/RabbitMQClient');
+
+export = RabbitMQClient;
 

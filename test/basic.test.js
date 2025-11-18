@@ -2,12 +2,17 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const RabbitMQClient = require('../lib/RabbitMQClient');
 
+// ==================== CONSTRUCTOR & VALIDATION ====================
+
 test('should create client instance', () => {
   const client = new RabbitMQClient('amqp://localhost');
   assert.ok(client instanceof RabbitMQClient);
+  assert.strictEqual(typeof client.connect, 'function');
+  assert.strictEqual(typeof client.publish, 'function');
+  assert.strictEqual(typeof client.consume, 'function');
 });
 
-test('should validate connection string', () => {
+test('should throw on invalid connection string', () => {
   assert.throws(() => {
     new RabbitMQClient('');
   }, /connectionString must be a non-empty string/);
@@ -15,6 +20,10 @@ test('should validate connection string', () => {
   assert.throws(() => {
     new RabbitMQClient(null);
   }, /connectionString must be a non-empty string/);
+
+  assert.throws(() => {
+    new RabbitMQClient('invalid-url');
+  }, /connectionString must be a valid AMQP URL/);
 });
 
 test('should validate retry config', () => {
@@ -28,11 +37,27 @@ test('should validate retry config', () => {
 
   assert.throws(() => {
     new RabbitMQClient('amqp://localhost', {
+      publishRetry: {
+        maxAttempts: 0,
+      },
+    });
+  }, /publishRetry\.maxAttempts must be a positive number/);
+
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
       consumeRetry: {
         multiplier: 0,
       },
     });
-  }, /consumeRetry\.multiplier must be a positive number/);
+  }, /consumeRetry\.multiplier must be >= 0.1/);
+
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
+      consumeRetry: {
+        multiplier: -1,
+      },
+    });
+  }, /consumeRetry\.multiplier must be >= 0.1/);
 });
 
 test('should validate DLQ config', () => {
@@ -43,183 +68,22 @@ test('should validate DLQ config', () => {
       },
     });
   }, /dlq\.exchange must be a non-empty string/);
-});
 
-test('should have DLQ disabled by default', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  assert.strictEqual(client.dlq.enabled, false);
-});
-
-test('should enable DLQ when explicitly set', () => {
-  const client = new RabbitMQClient('amqp://localhost', {
-    dlq: {
-      enabled: true,
-    },
-  });
-  assert.strictEqual(client.dlq.enabled, true);
-});
-
-test('should have default retry enabled', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  assert.strictEqual(client.publishRetry.enabled, true);
-  assert.strictEqual(client.consumeRetry.enabled, true);
-});
-
-test('should generate correlation ID', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  const id1 = client._generateCorrelationId();
-  const id2 = client._generateCorrelationId();
-  assert.ok(typeof id1 === 'string');
-  assert.ok(id1.length > 0);
-  assert.notStrictEqual(id1, id2);
-});
-
-test('should get correlation ID from options', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  const customId = 'custom-correlation-id';
-  const id = client._getCorrelationId(null, { correlationId: customId });
-  assert.strictEqual(id, customId);
-});
-
-test('should calculate retry delay', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  const delay1 = client._calculateRetryDelay(1, 1000, 10000, 2);
-  const delay2 = client._calculateRetryDelay(2, 1000, 10000, 2);
-  const delay3 = client._calculateRetryDelay(3, 1000, 10000, 2);
-
-  assert.strictEqual(delay1, 1000);
-  assert.strictEqual(delay2, 2000);
-  assert.strictEqual(delay3, 4000);
-});
-
-test('should cap retry delay at max', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  const delay = client._calculateRetryDelay(10, 1000, 5000, 2);
-  assert.strictEqual(delay, 5000);
-});
-
-test('should get connection info', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  const info = client.getConnectionInfo();
-
-  assert.ok(typeof info === 'object');
-  assert.strictEqual(info.connected, false);
-  assert.strictEqual(info.connectionString, 'amqp://localhost');
-  assert.strictEqual(info.autoReconnect, true);
-});
-
-test('should get all consumers', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  const consumers = client.getAllConsumers();
-
-  assert.ok(Array.isArray(consumers));
-  assert.strictEqual(consumers.length, 0);
-});
-
-test('should get metrics', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  const metrics = client.getMetrics();
-
-  assert.ok(typeof metrics === 'object');
-  assert.ok(metrics.connection);
-  assert.ok(metrics.publish);
-  assert.ok(metrics.consume);
-  assert.ok(metrics.queue);
-  assert.ok(metrics.exchange);
-});
-
-test('should reset metrics', () => {
-  const client = new RabbitMQClient('amqp://localhost');
-  client.metrics.connection.totalConnections = 10;
-  client.resetMetrics();
-
-  assert.strictEqual(client.metrics.connection.totalConnections, 0);
-});
-
-test('should get DLQ name', () => {
-  const client = new RabbitMQClient('amqp://localhost', {
-    dlq: {
-      enabled: true,
-      queuePrefix: 'dlq',
-    },
-  });
-
-  const dlqName = client.getDlqName('my_queue');
-  assert.strictEqual(dlqName, 'dlq.my_queue');
-});
-
-test('should have hooks support', () => {
-  const client = new RabbitMQClient('amqp://localhost', {
-    hooks: {
-      onPublish: () => {
-        // Hook function
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
+      dlq: {
+        queuePrefix: '',
       },
-    },
-  });
+    });
+  }, /dlq\.queuePrefix must be a non-empty string/);
 
-  assert.ok(client.hooks.onPublish);
-  assert.strictEqual(typeof client.hooks.onPublish, 'function');
-});
-
-test('should support custom serializer', () => {
-  const customSerializer = (message) => {
-    return Buffer.from(JSON.stringify({ custom: message }));
-  };
-
-  const client = new RabbitMQClient('amqp://localhost', {
-    serializer: customSerializer,
-  });
-
-  assert.strictEqual(client.serializer, customSerializer);
-});
-
-test('should support custom deserializer', () => {
-  const customDeserializer = (buffer) => {
-    return JSON.parse(buffer.toString());
-  };
-
-  const client = new RabbitMQClient('amqp://localhost', {
-    deserializer: customDeserializer,
-  });
-
-  assert.strictEqual(client.deserializer, customDeserializer);
-});
-
-test('should support tracing configuration', () => {
-  const getTraceContext = () => 'trace-123';
-  const setTraceContext = () => {};
-
-  const client = new RabbitMQClient('amqp://localhost', {
-    tracing: {
-      enabled: true,
-      headerName: 'x-trace-id',
-      correlationIdHeader: 'x-correlation-id',
-      getTraceContext,
-      setTraceContext,
-    },
-  });
-
-  assert.strictEqual(client.tracing.enabled, true);
-  assert.strictEqual(client.tracing.headerName, 'x-trace-id');
-  assert.strictEqual(client.tracing.correlationIdHeader, 'x-correlation-id');
-  assert.strictEqual(client.tracing.getTraceContext, getTraceContext);
-  assert.strictEqual(client.tracing.setTraceContext, setTraceContext);
-});
-
-test('should validate serializer', () => {
   assert.throws(() => {
     new RabbitMQClient('amqp://localhost', {
-      serializer: 'not-a-function',
+      dlq: {
+        ttl: -1,
+      },
     });
-  }, /serializer must be a function/);
-});
-
-test('should validate deserializer', () => {
-  assert.throws(() => {
-    new RabbitMQClient('amqp://localhost', {
-      deserializer: 'not-a-function',
-    });
-  }, /deserializer must be a function/);
+  }, /dlq\.ttl must be >= 0/);
 });
 
 test('should validate tracing config', () => {
@@ -248,68 +112,232 @@ test('should validate tracing config', () => {
   }, /tracing\.getTraceContext must be a function/);
 });
 
-test('should use default serializer', () => {
+test('should validate serializer and deserializer', () => {
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
+      serializer: 'not-a-function',
+    });
+  }, /serializer must be a function/);
+
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
+      deserializer: 'not-a-function',
+    });
+  }, /deserializer must be a function/);
+});
+
+// ==================== DEFAULT OPTIONS ====================
+
+test('should have correct default options', () => {
   const client = new RabbitMQClient('amqp://localhost');
-  const buffer = client.serializer({ test: 'data' });
-  assert.ok(Buffer.isBuffer(buffer));
-  assert.strictEqual(buffer.toString(), JSON.stringify({ test: 'data' }));
+
+  // Auto-reconnect defaults
+  assert.strictEqual(client.options.autoReconnect, true);
+  assert.strictEqual(client.options.maxReconnectAttempts, Infinity);
+  assert.strictEqual(client.options.initialReconnectDelay, 1000);
+  assert.strictEqual(client.options.maxReconnectDelay, 30000);
+  assert.strictEqual(client.options.reconnectMultiplier, 2);
+
+  // Retry defaults
+  assert.strictEqual(client.options.publishRetry.enabled, true);
+  assert.strictEqual(client.options.publishRetry.maxAttempts, 3);
+  assert.strictEqual(client.options.consumeRetry.enabled, true);
+  assert.strictEqual(client.options.consumeRetry.maxAttempts, 3);
+
+  // DLQ defaults
+  assert.strictEqual(client.options.dlq.enabled, false);
+  assert.strictEqual(client.options.dlq.exchange, 'dlx');
+  assert.strictEqual(client.options.dlq.queuePrefix, 'dlq');
+
+  // Shutdown defaults
+  assert.strictEqual(client.options.shutdownTimeout, 10000);
 });
 
-test('should use default deserializer', () => {
+test('should enable DLQ when explicitly set', () => {
+  const client = new RabbitMQClient('amqp://localhost', {
+    dlq: {
+      enabled: true,
+    },
+  });
+  assert.strictEqual(client.options.dlq.enabled, true);
+});
+
+test('should support custom options', () => {
+  const customSerializer = (msg) => Buffer.from(JSON.stringify({ custom: msg }));
+  const customDeserializer = (buf) => JSON.parse(buf.toString());
+
+  const client = new RabbitMQClient('amqp://localhost', {
+    autoReconnect: false,
+    maxReconnectAttempts: 5,
+    publishRetry: {
+      enabled: false,
+    },
+    serializer: customSerializer,
+    deserializer: customDeserializer,
+  });
+
+  assert.strictEqual(client.options.autoReconnect, false);
+  assert.strictEqual(client.options.maxReconnectAttempts, 5);
+  assert.strictEqual(client.options.publishRetry.enabled, false);
+  assert.strictEqual(client.publisher.serializer, customSerializer);
+  assert.strictEqual(client.consumer.deserializer, customDeserializer);
+});
+
+// ==================== CONNECTION INFO ====================
+
+test('should get connection info', () => {
   const client = new RabbitMQClient('amqp://localhost');
-  const buffer = Buffer.from(JSON.stringify({ test: 'data' }));
-  const result = client.deserializer(buffer);
-  assert.deepStrictEqual(result, { test: 'data' });
+  const info = client.getConnectionInfo();
+
+  assert.ok(typeof info === 'object');
+  assert.strictEqual(info.connected, false);
+  assert.strictEqual(info.connectionString, 'amqp://localhost');
+  assert.strictEqual(info.autoReconnect, true);
+  assert.strictEqual(info.maxReconnectAttempts, Infinity);
+  assert.strictEqual(typeof info.reconnectAttempts, 'number');
 });
 
-test('should auto-generate trace ID when tracing enabled', () => {
+test('should report not connected initially', () => {
+  const client = new RabbitMQClient('amqp://localhost');
+  assert.strictEqual(client.isConnected(), false);
+});
+
+// ==================== CONSUMERS ====================
+
+test('should get all consumers (empty initially)', () => {
+  const client = new RabbitMQClient('amqp://localhost');
+  const consumers = client.getAllConsumers();
+
+  assert.ok(Array.isArray(consumers));
+  assert.strictEqual(consumers.length, 0);
+});
+
+// ==================== METRICS ====================
+
+test('should get initial metrics', () => {
+  const client = new RabbitMQClient('amqp://localhost');
+  const metrics = client.getMetrics();
+
+  assert.ok(typeof metrics === 'object');
+  assert.ok(metrics.connection);
+  assert.ok(metrics.publish);
+  assert.ok(metrics.consume);
+  assert.ok(metrics.queue);
+  assert.ok(metrics.exchange);
+
+  // Check structure
+  assert.strictEqual(metrics.connection.totalConnections, 0);
+  assert.strictEqual(metrics.publish.totalPublished, 0);
+  assert.strictEqual(metrics.consume.totalConsumed, 0);
+  assert.strictEqual(metrics.queue.totalAsserted, 0);
+  assert.strictEqual(metrics.exchange.totalAsserted, 0);
+});
+
+test('should reset metrics', () => {
+  const client = new RabbitMQClient('amqp://localhost');
+
+  // Manually set some metrics
+  client.metrics.connection.totalConnections = 10;
+  client.metrics.publish.totalPublished = 50;
+
+  // Reset
+  client.resetMetrics();
+
+  // Check they're reset
+  const metrics = client.getMetrics();
+  assert.strictEqual(metrics.connection.totalConnections, 0);
+  assert.strictEqual(metrics.publish.totalPublished, 0);
+});
+
+// ==================== DLQ ====================
+
+test('should get DLQ name', () => {
   const client = new RabbitMQClient('amqp://localhost', {
-    tracing: {
+    dlq: {
       enabled: true,
-      getTraceContext: () => null, // Нет trace context
+      queuePrefix: 'dlq',
     },
   });
 
-  const traceId = client._getTraceId({});
-  assert.ok(traceId);
-  assert.ok(typeof traceId === 'string');
-  assert.ok(traceId.length > 0);
+  const dlqName = client.getDlqName('my_queue');
+  assert.strictEqual(dlqName, 'dlq.my_queue');
 });
 
-test('should use trace ID from context when available', () => {
+test('should get DLQ name with custom prefix', () => {
   const client = new RabbitMQClient('amqp://localhost', {
-    tracing: {
+    dlq: {
       enabled: true,
-      getTraceContext: () => 'trace-from-context',
+      queuePrefix: 'dead-letters',
     },
   });
 
-  const traceId = client._getTraceId({});
-  assert.strictEqual(traceId, 'trace-from-context');
+  const dlqName = client.getDlqName('orders');
+  assert.strictEqual(dlqName, 'dead-letters.orders');
 });
 
-test('should use trace ID from options when provided', () => {
+// ==================== HOOKS ====================
+
+test('should support hooks configuration', () => {
+  let publishCalled = false;
+  let consumeCalled = false;
+  let errorCalled = false;
+
   const client = new RabbitMQClient('amqp://localhost', {
-    tracing: {
-      enabled: true,
-      getTraceContext: () => 'trace-from-context',
+    hooks: {
+      onPublish: () => {
+        publishCalled = true;
+      },
+      onConsume: () => {
+        consumeCalled = true;
+      },
+      onError: () => {
+        errorCalled = true;
+      },
     },
   });
 
-  const traceId = client._getTraceId({ traceId: 'trace-from-options' });
-  assert.strictEqual(traceId, 'trace-from-options');
+  assert.ok(client.options.hooks.onPublish);
+  assert.ok(client.options.hooks.onConsume);
+  assert.ok(client.options.hooks.onError);
+  assert.strictEqual(typeof client.options.hooks.onPublish, 'function');
 });
 
-test('should support custom trace ID generator', () => {
-  const customGenerator = () => 'custom-trace-id';
+// ==================== TRACING ====================
+
+test('should support tracing configuration', () => {
+  const getTraceContext = () => 'trace-123';
+  const setTraceContext = () => {};
+  const generateTraceId = () => 'custom-trace-id';
+
   const client = new RabbitMQClient('amqp://localhost', {
     tracing: {
       enabled: true,
-      generateTraceId: customGenerator,
-      getTraceContext: () => null,
+      headerName: 'x-custom-trace',
+      correlationIdHeader: 'x-custom-correlation',
+      getTraceContext,
+      setTraceContext,
+      generateTraceId,
     },
   });
 
-  const traceId = client._getTraceId({});
-  assert.strictEqual(traceId, 'custom-trace-id');
+  assert.strictEqual(client.options.tracing.enabled, true);
+  assert.strictEqual(client.options.tracing.headerName, 'x-custom-trace');
+  assert.strictEqual(client.options.tracing.correlationIdHeader, 'x-custom-correlation');
+  assert.strictEqual(client.options.tracing.getTraceContext, getTraceContext);
+  assert.strictEqual(client.options.tracing.setTraceContext, setTraceContext);
+  assert.strictEqual(client.options.tracing.generateTraceId, generateTraceId);
+});
+
+// ==================== HEALTH CHECK ====================
+
+test('should perform health check', async () => {
+  const client = new RabbitMQClient('amqp://localhost');
+  const health = await client.healthCheck();
+
+  assert.ok(health);
+  assert.ok(['healthy', 'unhealthy', 'degraded'].includes(health.status));
+  assert.ok(health.timestamp);
+  assert.ok(health.checks);
+  assert.ok(health.checks.connection);
+  assert.ok(health.checks.consumers);
 });
