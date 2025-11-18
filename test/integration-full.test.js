@@ -107,6 +107,7 @@ test('should handle retry on consume error', async (t) => {
   await client.assertQueue(queueName, { durable: false });
 
   let attemptCount = 0;
+  let messageProcessed = false;
   await client.consume(
     queueName,
     async (_msg) => {
@@ -114,6 +115,7 @@ test('should handle retry on consume error', async (t) => {
       if (attemptCount < 2) {
         throw new Error('Simulated error');
       }
+      messageProcessed = true;
     },
     { maxRetries: 2 }
   );
@@ -121,7 +123,11 @@ test('should handle retry on consume error', async (t) => {
   await client.publish(queueName, { test: 'retry' });
 
   // Wait for retry processing
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  let attempts = 0;
+  while (!messageProcessed && attempts < 50) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    attempts++;
+  }
 
   assert.strictEqual(attemptCount, 2);
 
@@ -331,10 +337,12 @@ test('should propagate trace ID through messages', async (t) => {
 
   let receivedTraceId = null;
   let receivedCorrelationId = null;
+  let messageProcessed = false;
 
   await client.consume(queueName, async (msg) => {
     receivedTraceId = msg.properties.headers['x-trace-id'];
     receivedCorrelationId = msg.properties.headers['x-correlation-id'];
+    messageProcessed = true;
   });
 
   // Устанавливаем trace context перед публикацией
@@ -343,7 +351,12 @@ test('should propagate trace ID through messages', async (t) => {
     await client.publish(queueName, { test: 'tracing' });
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  // Ждем пока сообщение будет обработано
+  let attempts = 0;
+  while (!messageProcessed && attempts < 50) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    attempts++;
+  }
 
   assert.ok(receivedTraceId);
   assert.ok(receivedCorrelationId);
@@ -364,6 +377,7 @@ test('should set trace context from message headers', async (t) => {
   const asyncLocalStorage = new AsyncLocalStorage();
 
   let setTraceId = null;
+  let messageProcessed = false;
 
   const client = new RabbitMQClient(AMQP_URL, {
     registerShutdownHandlers: false,
@@ -389,6 +403,7 @@ test('should set trace context from message headers', async (t) => {
     // Trace context должен быть установлен автоматически
     const currentTraceId = asyncLocalStorage.getStore()?.traceId;
     assert.strictEqual(currentTraceId, 'trace-from-header');
+    messageProcessed = true;
   });
 
   // Публикуем с trace ID в заголовках
@@ -402,9 +417,15 @@ test('should set trace context from message headers', async (t) => {
     }
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  // Ждем пока сообщение будет обработано
+  let attempts = 0;
+  while (!messageProcessed && attempts < 50) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    attempts++;
+  }
 
   assert.strictEqual(setTraceId, 'trace-from-header');
+  assert.strictEqual(messageProcessed, true);
 
   await client.close();
 });
