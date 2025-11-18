@@ -1007,6 +1007,146 @@ client.resetMetrics();
 
 ## Продвинутое использование
 
+### Кастомная сериализация
+
+Используйте MessagePack, Avro или любой другой формат сериализации:
+
+```javascript
+const msgpack = require('msgpack-lite');
+
+const client = new RabbitMQClient('amqp://localhost', {
+  serializer: (message) => {
+    if (Buffer.isBuffer(message)) return message;
+    if (typeof message === 'string') return Buffer.from(message);
+    return msgpack.encode(message);
+  },
+  deserializer: (buffer) => {
+    try {
+      return msgpack.decode(buffer);
+    } catch (e) {
+      return buffer.toString();
+    }
+  },
+});
+
+// Публикация - автоматически кодируется в MessagePack
+await client.publish('queue', { data: 'test' });
+
+// Потребление - автоматически декодируется из MessagePack
+await client.consume('queue', async (msg) => {
+  const data = msg.parsedContent; // Уже декодировано!
+});
+```
+
+### Распределенный трейсинг с AsyncLocalStorage
+
+Полная передача trace context:
+
+```javascript
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+
+const client = new RabbitMQClient('amqp://localhost', {
+  tracing: {
+    enabled: true,
+    headerName: 'x-trace-id',
+    correlationIdHeader: 'x-correlation-id',
+    getTraceContext: () => asyncLocalStorage.getStore()?.traceId,
+    setTraceContext: (traceId) => {
+      asyncLocalStorage.enterWith({ traceId });
+    },
+  },
+});
+
+// Сервис A: Устанавливаем trace context и публикуем
+asyncLocalStorage.run({ traceId: 'trace-abc-123' }, async () => {
+  await client.publish('orders', { orderId: 123 });
+  // Trace ID 'trace-abc-123' автоматически добавлен в заголовки
+});
+
+// Сервис B: Потребляем и trace context восстанавливается
+await client.consume('orders', async (msg) => {
+  // Trace context автоматически устанавливается из заголовков
+  const traceId = asyncLocalStorage.getStore()?.traceId;
+  console.log(`Обработка заказа с trace: ${traceId}`);
+
+  // Все логи и последующие вызовы будут иметь тот же trace ID
+  await processOrder(msg.parsedContent);
+});
+```
+
+### Автоматическая генерация Trace ID
+
+Если trace ID не предоставлен, он автоматически генерируется:
+
+```javascript
+const client = new RabbitMQClient('amqp://localhost', {
+  tracing: {
+    enabled: true,
+    // Если getTraceContext возвращает null, trace ID генерируется автоматически
+    getTraceContext: () => null,
+    generateTraceId: () => {
+      // Кастомный генератор (по умолчанию: timestamp + random)
+      return `trace-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    },
+  },
+});
+
+// Публикация без явного trace context
+await client.publish('queue', { data: 'test' });
+// Trace ID автоматически сгенерирован и добавлен в заголовки
+```
+
+### Управление Correlation ID
+
+Correlation ID автоматически генерируются и передаются:
+
+```javascript
+// Correlation ID автоматически генерируется для каждого сообщения
+await client.publish('queue', { data: 'test' });
+// Заголовок 'x-correlation-id' автоматически добавлен
+
+// Или предоставить кастомный correlation ID
+await client.publish(
+  'queue',
+  { data: 'test' },
+  {
+    correlationId: 'custom-correlation-id',
+  }
+);
+
+// Correlation ID сохраняется через повторные попытки и DLQ
+```
+
+### Комбинирование сериализации и трейсинга
+
+Используйте обе функции вместе:
+
+```javascript
+const client = new RabbitMQClient('amqp://localhost', {
+  // Кастомная сериализация
+  serializer: (msg) => Buffer.from(JSON.stringify(msg)),
+  deserializer: (buf) => JSON.parse(buf.toString()),
+
+  // Распределенный трейсинг
+  tracing: {
+    enabled: true,
+    getTraceContext: () => getCurrentTraceId(),
+    setTraceContext: (traceId) => setCurrentTraceId(traceId),
+  },
+});
+
+// Публикация с автоматической сериализацией и trace ID
+await client.publish('queue', { userId: 123, action: 'created' });
+
+// Потребление с автоматической десериализацией и trace context
+await client.consume('queue', async (msg) => {
+  const data = msg.parsedContent; // Десериализовано
+  const traceId = getCurrentTraceId(); // Trace context установлен
+  console.log(`Обработка ${data.action} с trace ${traceId}`);
+});
+```
+
 ### Пользовательский генератор Correlation ID
 
 ```javascript
@@ -1173,7 +1313,42 @@ await client.consume('queue', handler, {
 });
 ```
 
-### 5. Мониторинг
+### 5. Сериализация и трейсинг
+
+✅ **Правильно:**
+
+```javascript
+// Используйте кастомную сериализацию для лучшей производительности
+const client = new RabbitMQClient('amqp://localhost', {
+  serializer: (msg) => msgpack.encode(msg), // Быстрее чем JSON
+  deserializer: (buf) => msgpack.decode(buf),
+});
+```
+
+✅ **Правильно:**
+
+```javascript
+// Включите трейсинг для наблюдаемости
+const client = new RabbitMQClient('amqp://localhost', {
+  tracing: {
+    enabled: true,
+    getTraceContext: () => getCurrentTraceId(),
+    setTraceContext: (traceId) => setCurrentTraceId(traceId),
+  },
+});
+```
+
+✅ **Правильно:**
+
+```javascript
+// Используйте parsedContent для более чистого кода
+await client.consume('queue', async (msg) => {
+  const data = msg.parsedContent; // Уже десериализовано
+  await processData(data);
+});
+```
+
+### 6. Мониторинг
 
 ✅ **Правильно:**
 
