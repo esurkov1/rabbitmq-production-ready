@@ -16,6 +16,7 @@ If you discover a security vulnerability, please **do not** open a public issue.
 2. **Email**: Contact the maintainer directly at [GitHub profile](https://github.com/esurkov1)
 
 Please include the following information:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
@@ -38,4 +39,3 @@ When using this library:
 - This library handles connection strings that may contain credentials. Ensure proper logging configuration to avoid logging sensitive information
 - The library does not encrypt messages by default - use RabbitMQ TLS/SSL for encrypted transport
 - Dead Letter Queue (DLQ) may contain sensitive message content - ensure proper access controls
-

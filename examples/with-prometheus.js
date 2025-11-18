@@ -29,8 +29,8 @@ async function main() {
       },
       onConnectionChange: (data) => {
         console.log('Connection change hook:', data);
-      }
-    }
+      },
+    },
   });
 
   try {
@@ -46,7 +46,7 @@ async function main() {
 
     await client.publish('example_queue', { data: 'test' });
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     await client.close();
   } catch (error) {
@@ -56,4 +56,3 @@ async function main() {
 }
 
 main();
-

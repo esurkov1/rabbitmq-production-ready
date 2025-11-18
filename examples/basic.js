@@ -24,7 +24,7 @@ async function main() {
     console.log('Consumer started');
 
     // Wait a bit
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Health check
     const health = await client.healthCheck();
@@ -34,7 +34,7 @@ async function main() {
     const metrics = client.getMetrics();
     console.log('Metrics:', {
       published: metrics.publish.totalPublished,
-      consumed: metrics.consume.totalConsumed
+      consumed: metrics.consume.totalConsumed,
     });
 
     // Close
@@ -47,4 +47,3 @@ async function main() {
 }
 
 main();
-

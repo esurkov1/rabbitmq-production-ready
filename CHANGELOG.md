@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2024-01-01
 
 ### Added
+
 - Initial release
 - Auto-reconnect with exponential backoff
 - Retry logic for publish and consume operations
@@ -24,10 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration validation
 
 ### Features
+
 - Publisher methods: `publish()`, `publishToExchange()`
 - Consumer methods: `consume()`, `stopConsuming()`
 - Queue management: `assertQueue()`, `deleteQueue()`, `purgeQueue()`, `getQueueInfo()`
 - Exchange management: `assertExchange()`, `deleteExchange()`, `bindQueue()`, `unbindQueue()`, `getExchangeInfo()`
 - DLQ management: `getDlqName()`, `assertDlq()`, `getDlqInfo()`, `purgeDlq()`, `deleteDlq()`
 - Health and metrics: `healthCheck()`, `getMetrics()`, `resetMetrics()`
-

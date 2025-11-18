@@ -21,4 +21,3 @@
   "include": ["lib/**/*", "index.d.ts"],
   "exclude": ["node_modules", "test", "examples", "dist"]
 }
-

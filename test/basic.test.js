@@ -11,7 +11,7 @@ test('should validate connection string', () => {
   assert.throws(() => {
     new RabbitMQClient('');
   }, /connectionString must be a non-empty string/);
-  
+
   assert.throws(() => {
     new RabbitMQClient(null);
   }, /connectionString must be a non-empty string/);
@@ -21,16 +21,16 @@ test('should validate retry config', () => {
   assert.throws(() => {
     new RabbitMQClient('amqp://localhost', {
       publishRetry: {
-        maxAttempts: -1
-      }
+        maxAttempts: -1,
+      },
     });
   }, /publishRetry\.maxAttempts must be a positive number/);
-  
+
   assert.throws(() => {
     new RabbitMQClient('amqp://localhost', {
       consumeRetry: {
-        multiplier: 0
-      }
+        multiplier: 0,
+      },
     });
   }, /consumeRetry\.multiplier must be a positive number/);
 });
@@ -39,8 +39,8 @@ test('should validate DLQ config', () => {
   assert.throws(() => {
     new RabbitMQClient('amqp://localhost', {
       dlq: {
-        exchange: ''
-      }
+        exchange: '',
+      },
     });
   }, /dlq\.exchange must be a non-empty string/);
 });
@@ -53,8 +53,8 @@ test('should have DLQ disabled by default', () => {
 test('should enable DLQ when explicitly set', () => {
   const client = new RabbitMQClient('amqp://localhost', {
     dlq: {
-      enabled: true
-    }
+      enabled: true,
+    },
   });
   assert.strictEqual(client.dlq.enabled, true);
 });
@@ -86,7 +86,7 @@ test('should calculate retry delay', () => {
   const delay1 = client._calculateRetryDelay(1, 1000, 10000, 2);
   const delay2 = client._calculateRetryDelay(2, 1000, 10000, 2);
   const delay3 = client._calculateRetryDelay(3, 1000, 10000, 2);
-  
+
   assert.strictEqual(delay1, 1000);
   assert.strictEqual(delay2, 2000);
   assert.strictEqual(delay3, 4000);
@@ -101,7 +101,7 @@ test('should cap retry delay at max', () => {
 test('should get connection info', () => {
   const client = new RabbitMQClient('amqp://localhost');
   const info = client.getConnectionInfo();
-  
+
   assert.ok(typeof info === 'object');
   assert.strictEqual(info.connected, false);
   assert.strictEqual(info.connectionString, 'amqp://localhost');
@@ -111,7 +111,7 @@ test('should get connection info', () => {
 test('should get all consumers', () => {
   const client = new RabbitMQClient('amqp://localhost');
   const consumers = client.getAllConsumers();
-  
+
   assert.ok(Array.isArray(consumers));
   assert.strictEqual(consumers.length, 0);
 });
@@ -119,7 +119,7 @@ test('should get all consumers', () => {
 test('should get metrics', () => {
   const client = new RabbitMQClient('amqp://localhost');
   const metrics = client.getMetrics();
-  
+
   assert.ok(typeof metrics === 'object');
   assert.ok(metrics.connection);
   assert.ok(metrics.publish);
@@ -132,7 +132,7 @@ test('should reset metrics', () => {
   const client = new RabbitMQClient('amqp://localhost');
   client.metrics.connection.totalConnections = 10;
   client.resetMetrics();
-  
+
   assert.strictEqual(client.metrics.connection.totalConnections, 0);
 });
 
@@ -140,10 +140,10 @@ test('should get DLQ name', () => {
   const client = new RabbitMQClient('amqp://localhost', {
     dlq: {
       enabled: true,
-      queuePrefix: 'dlq'
-    }
+      queuePrefix: 'dlq',
+    },
   });
-  
+
   const dlqName = client.getDlqName('my_queue');
   assert.strictEqual(dlqName, 'dlq.my_queue');
 });
@@ -160,4 +160,3 @@ test('should have hooks support', () => {
   assert.ok(client.hooks.onPublish);
   assert.strictEqual(typeof client.hooks.onPublish, 'function');
 });
-

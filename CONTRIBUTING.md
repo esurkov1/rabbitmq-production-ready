@@ -6,6 +6,7 @@ Thank you for your interest in contributing to RabbitMQ Production-Ready Client!
 
 1. Clone the repository
 2. Install dependencies:
+
    ```bash
    npm install
    ```
@@ -39,10 +40,10 @@ Thank you for your interest in contributing to RabbitMQ Production-Ready Client!
 ## Reporting Issues
 
 When reporting issues, please include:
+
 - Node.js version
 - RabbitMQ version
 - Steps to reproduce
 - Expected behavior
 - Actual behavior
 - Error messages/logs
-

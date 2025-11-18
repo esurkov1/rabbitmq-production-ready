@@ -61,41 +61,41 @@ const client = new RabbitMQClient('amqp://localhost', {
   // Logging
   logger: pino({ level: 'info' }),
   logLevel: 'info',
-  
+
   // Auto-reconnect
   autoReconnect: true,
   maxReconnectAttempts: Infinity,
   initialReconnectDelay: 1000,
   maxReconnectDelay: 30000,
   reconnectMultiplier: 2,
-  
+
   // Retry
   publishRetry: {
     enabled: true,
     maxAttempts: 3,
     initialDelay: 1000,
     maxDelay: 10000,
-    multiplier: 2
+    multiplier: 2,
   },
   consumeRetry: {
     enabled: true,
     maxAttempts: 3,
     initialDelay: 1000,
     maxDelay: 10000,
-    multiplier: 2
+    multiplier: 2,
   },
-  
+
   // Dead Letter Queue
   dlq: {
     enabled: false, // disabled by default
     exchange: 'dlx',
     queuePrefix: 'dlq',
-    ttl: null
+    ttl: null,
   },
-  
+
   // Graceful shutdown
   shutdownTimeout: 10000,
-  
+
   // Hooks for Prometheus integration
   hooks: {
     onPublish: (data) => {
@@ -113,8 +113,8 @@ const client = new RabbitMQClient('amqp://localhost', {
     onConnectionChange: (data) => {
       // data: { connected, wasReconnect }
       prometheusGauge.set(data.connected ? 1 : 0);
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -123,6 +123,7 @@ const client = new RabbitMQClient('amqp://localhost', {
 ### Connection Management
 
 #### `connect()`
+
 Connect to RabbitMQ.
 
 ```javascript
@@ -130,6 +131,7 @@ await client.connect();
 ```
 
 #### `close()`
+
 Gracefully close connection and stop all consumers.
 
 ```javascript
@@ -137,6 +139,7 @@ await client.close();
 ```
 
 #### `isConnected()`
+
 Check if client is connected.
 
 ```javascript
@@ -144,6 +147,7 @@ const connected = client.isConnected();
 ```
 
 #### `waitForConnection(timeout?, interval?)`
+
 Wait for connection with timeout.
 
 ```javascript
@@ -151,6 +155,7 @@ await client.waitForConnection(30000, 100);
 ```
 
 #### `getConnectionInfo()`
+
 Get connection information.
 
 ```javascript
@@ -167,17 +172,23 @@ const info = client.getConnectionInfo();
 ### Publishing
 
 #### `publish(queue, message, options?)`
+
 Publish message to queue.
 
 ```javascript
-await client.publish('my_queue', { data: 'Hello' }, {
-  persistent: true,
-  correlationId: 'custom-id',
-  retry: true
-});
+await client.publish(
+  'my_queue',
+  { data: 'Hello' },
+  {
+    persistent: true,
+    correlationId: 'custom-id',
+    retry: true,
+  }
+);
 ```
 
 #### `publishToExchange(exchange, routingKey, message, options?)`
+
 Publish message through exchange.
 
 ```javascript
@@ -187,20 +198,26 @@ await client.publishToExchange('my_exchange', 'routing.key', { data: 'Hello' });
 ### Consuming
 
 #### `consume(queue, handler, options?)`
+
 Start consuming messages from queue.
 
 ```javascript
-const consumerTag = await client.consume('my_queue', async (msg) => {
-  const content = JSON.parse(msg.content.toString());
-  // Process message
-}, {
-  prefetch: 10,
-  maxRetries: 3,
-  retry: true
-});
+const consumerTag = await client.consume(
+  'my_queue',
+  async (msg) => {
+    const content = JSON.parse(msg.content.toString());
+    // Process message
+  },
+  {
+    prefetch: 10,
+    maxRetries: 3,
+    retry: true,
+  }
+);
 ```
 
 #### `stopConsuming(queue)`
+
 Stop consuming messages from queue.
 
 ```javascript
@@ -208,6 +225,7 @@ await client.stopConsuming('my_queue');
 ```
 
 #### `getAllConsumers()`
+
 Get list of all active consumers.
 
 ```javascript
@@ -218,16 +236,18 @@ const consumers = client.getAllConsumers();
 ### Queue Management
 
 #### `assertQueue(queue, options?)`
+
 Create or verify queue exists.
 
 ```javascript
 const queueInfo = await client.assertQueue('my_queue', {
   durable: true,
-  dlq: true // Enable DLQ for this queue
+  dlq: true, // Enable DLQ for this queue
 });
 ```
 
 #### `deleteQueue(queue, options?)`
+
 Delete queue.
 
 ```javascript
@@ -235,6 +255,7 @@ await client.deleteQueue('my_queue', { ifUnused: true });
 ```
 
 #### `purgeQueue(queue)`
+
 Purge all messages from queue.
 
 ```javascript
@@ -242,6 +263,7 @@ await client.purgeQueue('my_queue');
 ```
 
 #### `getQueueInfo(queue)`
+
 Get queue information.
 
 ```javascript
@@ -252,6 +274,7 @@ const info = await client.getQueueInfo('my_queue');
 ### Exchange Management
 
 #### `assertExchange(exchange, type, options?)`
+
 Create or verify exchange exists.
 
 ```javascript
@@ -259,6 +282,7 @@ await client.assertExchange('my_exchange', 'topic', { durable: true });
 ```
 
 #### `deleteExchange(exchange, options?)`
+
 Delete exchange.
 
 ```javascript
@@ -266,6 +290,7 @@ await client.deleteExchange('my_exchange');
 ```
 
 #### `bindQueue(queue, exchange, routingKey, args?)`
+
 Bind queue to exchange.
 
 ```javascript
@@ -273,6 +298,7 @@ await client.bindQueue('my_queue', 'my_exchange', 'routing.key');
 ```
 
 #### `unbindQueue(queue, exchange, routingKey, args?)`
+
 Unbind queue from exchange.
 
 ```javascript
@@ -280,6 +306,7 @@ await client.unbindQueue('my_queue', 'my_exchange', 'routing.key');
 ```
 
 #### `getExchangeInfo(exchange)`
+
 Get exchange information.
 
 ```javascript
@@ -289,6 +316,7 @@ const info = await client.getExchangeInfo('my_exchange');
 ### Dead Letter Queue
 
 #### `getDlqName(queue)`
+
 Get DLQ name for queue.
 
 ```javascript
@@ -296,6 +324,7 @@ const dlqName = client.getDlqName('my_queue'); // 'dlq.my_queue'
 ```
 
 #### `assertDlq(queue)`
+
 Create or verify DLQ exists.
 
 ```javascript
@@ -303,6 +332,7 @@ await client.assertDlq('my_queue');
 ```
 
 #### `getDlqInfo(queue)`
+
 Get DLQ information.
 
 ```javascript
@@ -310,6 +340,7 @@ const info = await client.getDlqInfo('my_queue');
 ```
 
 #### `purgeDlq(queue)`
+
 Purge DLQ.
 
 ```javascript
@@ -317,6 +348,7 @@ await client.purgeDlq('my_queue');
 ```
 
 #### `deleteDlq(queue, options?)`
+
 Delete DLQ.
 
 ```javascript
@@ -326,6 +358,7 @@ await client.deleteDlq('my_queue');
 ### Health & Metrics
 
 #### `healthCheck()`
+
 Perform health check.
 
 ```javascript
@@ -341,6 +374,7 @@ const health = await client.healthCheck();
 ```
 
 #### `getMetrics()`
+
 Get collected metrics.
 
 ```javascript
@@ -354,6 +388,7 @@ const metrics = client.getMetrics();
 ```
 
 #### `resetMetrics()`
+
 Reset all metrics.
 
 ```javascript
@@ -381,8 +416,8 @@ import RabbitMQClient, { RabbitMQClientOptions } from 'rabbitmq-production-ready
 const options: RabbitMQClientOptions = {
   autoReconnect: true,
   dlq: {
-    enabled: true
-  }
+    enabled: true,
+  },
 };
 
 const client = new RabbitMQClient('amqp://localhost', options);
@@ -397,7 +432,7 @@ The client automatically registers SIGTERM and SIGINT handlers for graceful shut
 
 ```javascript
 const client = new RabbitMQClient('amqp://localhost', {
-  registerShutdownHandlers: false
+  registerShutdownHandlers: false,
 });
 ```
 
@@ -408,6 +443,7 @@ const client = new RabbitMQClient('amqp://localhost', {
 **Problem**: Client cannot connect to RabbitMQ
 
 **Solutions**:
+
 - Verify RabbitMQ is running: `rabbitmqctl status`
 - Check connection string format: `amqp://user:password@host:port/vhost`
 - Ensure network connectivity and firewall rules
@@ -418,6 +454,7 @@ const client = new RabbitMQClient('amqp://localhost', {
 **Problem**: Messages are published but not consumed
 
 **Solutions**:
+
 - Verify consumer is started: `client.getAllConsumers()`
 - Check queue exists: `await client.getQueueInfo('queue_name')`
 - Ensure handler doesn't throw unhandled errors
@@ -428,6 +465,7 @@ const client = new RabbitMQClient('amqp://localhost', {
 **Problem**: Client consumes too much memory
 
 **Solutions**:
+
 - Reduce `prefetch` value in consume options
 - Enable `noAck: true` if message acknowledgment is not needed
 - Monitor metrics: `client.getMetrics()`
@@ -438,6 +476,7 @@ const client = new RabbitMQClient('amqp://localhost', {
 **Problem**: Failed messages not sent to DLQ
 
 **Solutions**:
+
 - Ensure DLQ is enabled: `dlq: { enabled: true }`
 - Verify DLQ is created: `await client.assertDlq('queue_name')`
 - Check retry count doesn't exceed `maxRetries`
@@ -448,6 +487,7 @@ const client = new RabbitMQClient('amqp://localhost', {
 **Problem**: Client doesn't reconnect after disconnection
 
 **Solutions**:
+
 - Verify `autoReconnect: true` (enabled by default)
 - Check `maxReconnectAttempts` is not too low
 - Monitor connection events: `client.on('reconnect', ...)`
@@ -474,4 +514,3 @@ MIT
 - [GitHub Repository](https://github.com/esurkov1/rabbitmq-production-ready)
 - [NPM Package](https://www.npmjs.com/package/rabbitmq-production-ready)
 - [Issues](https://github.com/esurkov1/rabbitmq-production-ready/issues)
-

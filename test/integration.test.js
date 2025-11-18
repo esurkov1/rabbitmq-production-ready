@@ -188,4 +188,3 @@ test('should handle reconnection', async () => {
 
   await client.close();
 });
-

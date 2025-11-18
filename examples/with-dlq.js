@@ -5,12 +5,12 @@ async function main() {
     dlq: {
       enabled: true,
       exchange: 'dlx',
-      queuePrefix: 'dlq'
+      queuePrefix: 'dlq',
     },
     consumeRetry: {
       enabled: true,
-      maxAttempts: 3
-    }
+      maxAttempts: 3,
+    },
   });
 
   try {
@@ -29,7 +29,7 @@ async function main() {
     await client.consume('example_queue', async (msg) => {
       const content = JSON.parse(msg.content.toString());
       console.log('Processing:', content);
-      
+
       // Simulate error
       if (content.shouldFail) {
         throw new Error('Processing failed');
@@ -41,7 +41,7 @@ async function main() {
     console.log('Published message that will fail');
 
     // Wait for processing
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
     // Check DLQ
     const dlqInfo = await client.getDlqInfo('example_queue');
@@ -55,4 +55,3 @@ async function main() {
 }
 
 main();
-
