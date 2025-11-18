@@ -36,6 +36,8 @@ Production-ready клиент RabbitMQ для Node.js с автоматичес�
 - ✅ **Проверки здоровья** - Готовые health endpoints для интеграции
 - ✅ **Корректное завершение работы** - Чистое завершение приложения
 - ✅ **Correlation IDs** - Отслеживание сообщений между сервисами
+- ✅ **Распределенный трейсинг** - Сквозная передача trace ID
+- ✅ **Кастомная сериализация** - Гибкое кодирование/декодирование сообщений
 - ✅ **Поддержка TypeScript** - Полные определения типов включены
 - ✅ **Хуки** для интеграции с Prometheus - Легкий экспорт метрик
 - ✅ **Event-driven** - Реакция на изменения соединения
@@ -84,7 +86,8 @@ async function main() {
 
     // 5. Потребляем сообщения
     await client.consume('my_queue', async (msg) => {
-      const content = JSON.parse(msg.content.toString());
+      // Используем parsedContent для автоматически десериализованного сообщения
+      const content = msg.parsedContent || JSON.parse(msg.content.toString());
       console.log('📨 Получено:', content);
 
       // Ваша бизнес-логика здесь
@@ -240,6 +243,8 @@ init().catch(console.error);
 | Проверки здоровья        | ❌                 | ✅                |
 | Корректное завершение    | Ручное             | ✅ Автоматическое |
 | Correlation IDs          | Ручные             | ✅ Автоматические |
+| Распределенный трейсинг  | ❌                 | ✅ Встроенный     |
+| Кастомная сериализация   | ❌                 | ✅ Гибкая         |
 | TypeScript               | ❌                 | ✅                |
 
 ## Основные концепции
@@ -317,6 +322,74 @@ const client = new RabbitMQClient('amqp://localhost', {
 await client.assertQueue('orders', { dlq: true });
 
 // Неудачные сообщения автоматически попадают в 'dlq.orders'
+```
+
+### 6. Сериализация сообщений
+
+Кастомная сериализация для гибкого кодирования сообщений:
+
+```javascript
+const client = new RabbitMQClient('amqp://localhost', {
+  // Кастомный сериализатор (по умолчанию: JSON.stringify для объектов)
+  serializer: (message) => {
+    if (Buffer.isBuffer(message)) return message;
+    if (typeof message === 'string') return Buffer.from(message);
+    // Используйте MessagePack, Avro или любой другой формат
+    return Buffer.from(JSON.stringify(message));
+  },
+
+  // Кастомный десериализатор (по умолчанию: JSON.parse)
+  deserializer: (buffer) => {
+    try {
+      return JSON.parse(buffer.toString());
+    } catch (e) {
+      return buffer.toString();
+    }
+  },
+});
+
+// Публикация - автоматически сериализуется
+await client.publish('queue', { data: 'test' });
+
+// Потребление - автоматически десериализуется в msg.parsedContent
+await client.consume('queue', async (msg) => {
+  const data = msg.parsedContent; // Уже десериализовано!
+  console.log(data); // { data: 'test' }
+});
+```
+
+### 7. Распределенный трейсинг
+
+Сквозная передача trace ID между сервисами:
+
+```javascript
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+
+const client = new RabbitMQClient('amqp://localhost', {
+  tracing: {
+    enabled: true,
+    headerName: 'x-trace-id', // Имя заголовка для trace ID
+    correlationIdHeader: 'x-correlation-id', // Имя заголовка для correlation ID
+    getTraceContext: () => asyncLocalStorage.getStore()?.traceId,
+    setTraceContext: (traceId) => {
+      asyncLocalStorage.enterWith({ traceId });
+    },
+  },
+});
+
+// Устанавливаем trace context перед публикацией
+asyncLocalStorage.run({ traceId: 'trace-123' }, async () => {
+  await client.publish('queue', { data: 'test' });
+  // Trace ID автоматически добавлен в заголовки сообщения
+});
+
+// Потребление - trace context автоматически восстанавливается
+await client.consume('queue', async (msg) => {
+  // Trace context автоматически устанавливается из заголовков сообщения
+  const currentTraceId = asyncLocalStorage.getStore()?.traceId;
+  console.log('Обработка с trace:', currentTraceId);
+});
 ```
 
 ## Руководство по конфигурации
