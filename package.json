@@ -7,6 +7,9 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "test:watch": "node --test --watch test/*.test.js",
+    "test:integration": "AMQP_URL=amqp://guest:guest@localhost:5672 node --test test/integration.test.js",
+    "test:docker": "bash scripts/test-with-docker.sh",
+    "test:all": "npm run test && npm run test:docker",
     "lint": "eslint lib/**/*.js test/**/*.js examples/**/*.js",
     "lint:fix": "eslint lib/**/*.js test/**/*.js examples/**/*.js --fix",
     "format": "prettier --write \"**/*.{js,json,md}\"",

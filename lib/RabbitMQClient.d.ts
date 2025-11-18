@@ -9,6 +9,15 @@ export interface Hooks {
   onConnectionChange?: (data: { connected: boolean; wasReconnect?: boolean }) => void;
 }
 
+export interface TracingConfig {
+  enabled?: boolean;
+  headerName?: string;
+  correlationIdHeader?: string;
+  getTraceContext?: () => string | null | undefined;
+  setTraceContext?: (traceId: string) => void;
+  generateTraceId?: () => string;
+}
+
 export interface RabbitMQClientOptions {
   logger?: Logger;
   logLevel?: string;
@@ -21,6 +30,9 @@ export interface RabbitMQClientOptions {
   shutdownTimeout?: number;
   registerShutdownHandlers?: boolean;
   correlationIdGenerator?: () => string;
+  serializer?: (message: any) => Buffer;
+  deserializer?: (buffer: Buffer) => any;
+  tracing?: TracingConfig;
   publishRetry?: RetryConfig;
   consumeRetry?: RetryConfig;
   dlq?: DLQConfig;
@@ -44,6 +56,7 @@ export interface DLQConfig {
 export interface PublishOptions extends Options.Publish {
   retry?: boolean;
   correlationId?: string;
+  traceId?: string;
 }
 
 export interface ConsumeOptions extends Options.Consume {
@@ -118,7 +131,11 @@ declare class RabbitMQClient extends EventEmitter {
   publish(queue: string, message: string | Buffer | object, options?: PublishOptions): Promise<boolean>;
   publishToExchange(exchange: string, routingKey: string, message: string | Buffer | object, options?: PublishOptions): Promise<boolean>;
 
-  consume(queue: string, handler: (msg: ConsumeMessage) => Promise<void>, options?: ConsumeOptions): Promise<string>;
+  consume(
+    queue: string,
+    handler: (msg: ConsumeMessage & { parsedContent?: any }) => Promise<void>,
+    options?: ConsumeOptions
+  ): Promise<string>;
   stopConsuming(queue: string): Promise<void>;
 
   assertQueue(queue: string, options?: Options.AssertQueue): Promise<Options.AssertQueue>;

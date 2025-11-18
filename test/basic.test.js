@@ -160,3 +160,156 @@ test('should have hooks support', () => {
   assert.ok(client.hooks.onPublish);
   assert.strictEqual(typeof client.hooks.onPublish, 'function');
 });
+
+test('should support custom serializer', () => {
+  const customSerializer = (message) => {
+    return Buffer.from(JSON.stringify({ custom: message }));
+  };
+
+  const client = new RabbitMQClient('amqp://localhost', {
+    serializer: customSerializer,
+  });
+
+  assert.strictEqual(client.serializer, customSerializer);
+});
+
+test('should support custom deserializer', () => {
+  const customDeserializer = (buffer) => {
+    return JSON.parse(buffer.toString());
+  };
+
+  const client = new RabbitMQClient('amqp://localhost', {
+    deserializer: customDeserializer,
+  });
+
+  assert.strictEqual(client.deserializer, customDeserializer);
+});
+
+test('should support tracing configuration', () => {
+  const getTraceContext = () => 'trace-123';
+  const setTraceContext = () => {};
+
+  const client = new RabbitMQClient('amqp://localhost', {
+    tracing: {
+      enabled: true,
+      headerName: 'x-trace-id',
+      correlationIdHeader: 'x-correlation-id',
+      getTraceContext,
+      setTraceContext,
+    },
+  });
+
+  assert.strictEqual(client.tracing.enabled, true);
+  assert.strictEqual(client.tracing.headerName, 'x-trace-id');
+  assert.strictEqual(client.tracing.correlationIdHeader, 'x-correlation-id');
+  assert.strictEqual(client.tracing.getTraceContext, getTraceContext);
+  assert.strictEqual(client.tracing.setTraceContext, setTraceContext);
+});
+
+test('should validate serializer', () => {
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
+      serializer: 'not-a-function',
+    });
+  }, /serializer must be a function/);
+});
+
+test('should validate deserializer', () => {
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
+      deserializer: 'not-a-function',
+    });
+  }, /deserializer must be a function/);
+});
+
+test('should validate tracing config', () => {
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
+      tracing: {
+        enabled: 'not-boolean',
+      },
+    });
+  }, /tracing\.enabled must be a boolean/);
+
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
+      tracing: {
+        headerName: '',
+      },
+    });
+  }, /tracing\.headerName must be a non-empty string/);
+
+  assert.throws(() => {
+    new RabbitMQClient('amqp://localhost', {
+      tracing: {
+        getTraceContext: 'not-a-function',
+      },
+    });
+  }, /tracing\.getTraceContext must be a function/);
+});
+
+test('should use default serializer', () => {
+  const client = new RabbitMQClient('amqp://localhost');
+  const buffer = client.serializer({ test: 'data' });
+  assert.ok(Buffer.isBuffer(buffer));
+  assert.strictEqual(buffer.toString(), JSON.stringify({ test: 'data' }));
+});
+
+test('should use default deserializer', () => {
+  const client = new RabbitMQClient('amqp://localhost');
+  const buffer = Buffer.from(JSON.stringify({ test: 'data' }));
+  const result = client.deserializer(buffer);
+  assert.deepStrictEqual(result, { test: 'data' });
+});
+
+test('should auto-generate trace ID when tracing enabled', () => {
+  const client = new RabbitMQClient('amqp://localhost', {
+    tracing: {
+      enabled: true,
+      getTraceContext: () => null, // Нет trace context
+    },
+  });
+
+  const traceId = client._getTraceId({});
+  assert.ok(traceId);
+  assert.ok(typeof traceId === 'string');
+  assert.ok(traceId.length > 0);
+});
+
+test('should use trace ID from context when available', () => {
+  const client = new RabbitMQClient('amqp://localhost', {
+    tracing: {
+      enabled: true,
+      getTraceContext: () => 'trace-from-context',
+    },
+  });
+
+  const traceId = client._getTraceId({});
+  assert.strictEqual(traceId, 'trace-from-context');
+});
+
+test('should use trace ID from options when provided', () => {
+  const client = new RabbitMQClient('amqp://localhost', {
+    tracing: {
+      enabled: true,
+      getTraceContext: () => 'trace-from-context',
+    },
+  });
+
+  const traceId = client._getTraceId({ traceId: 'trace-from-options' });
+  assert.strictEqual(traceId, 'trace-from-options');
+});
+
+test('should support custom trace ID generator', () => {
+  const customGenerator = () => 'custom-trace-id';
+  const client = new RabbitMQClient('amqp://localhost', {
+    tracing: {
+      enabled: true,
+      generateTraceId: customGenerator,
+      getTraceContext: () => null,
+    },
+  });
+
+  const traceId = client._getTraceId({});
+  assert.strictEqual(traceId, 'custom-trace-id');
+});
