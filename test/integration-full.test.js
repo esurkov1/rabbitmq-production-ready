@@ -76,7 +76,11 @@ test('should publish and consume messages', async (t) => {
   await client.publish(queueName, { test: 'message2' });
 
   // Wait for messages to be processed
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  let attempts = 0;
+  while (receivedMessages.length < 2 && attempts < 50) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    attempts++;
+  }
 
   assert.strictEqual(receivedMessages.length, 2);
   assert.strictEqual(receivedMessages[0].test, 'message1');
@@ -299,7 +303,12 @@ test('should use custom serializer/deserializer', async (t) => {
 
   await client.publish(queueName, { test: 'custom' });
 
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  // Wait for message to be processed
+  let attempts = 0;
+  while (receivedMessages.length < 1 && attempts < 50) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    attempts++;
+  }
 
   assert.strictEqual(receivedMessages.length, 1);
   assert.deepStrictEqual(receivedMessages[0], { test: 'custom' });
