@@ -5,6 +5,8 @@
 [![Node.js Version](https://img.shields.io/node/v/rabbitmq-production-ready.svg)](https://nodejs.org/)
 [![GitHub](https://img.shields.io/github/stars/esurkov1/rabbitmq-production-ready.svg)](https://github.com/esurkov1/rabbitmq-production-ready)
 
+**🇷🇺 [Русская версия документации](README.ru.md)**
+
 Production-ready RabbitMQ client for Node.js with auto-reconnect, retry logic, DLQ support, metrics, health checks, and comprehensive error handling.
 
 ## Features
