@@ -207,14 +207,24 @@ test('should collect metrics', async (t) => {
 
   await client.assertQueue(queueName, { durable: false });
 
+  let processedCount = 0;
   await client.consume(queueName, async () => {
     // Process message
+    processedCount++;
   });
+
+  // Небольшая задержка чтобы consumer начал работу
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   await client.publish(queueName, { test: 'metrics1' });
   await client.publish(queueName, { test: 'metrics2' });
 
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  // Wait for messages to be processed
+  let attempts = 0;
+  while (processedCount < 2 && attempts < 50) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    attempts++;
+  }
 
   const metrics = client.getMetrics();
 
