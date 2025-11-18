@@ -261,6 +261,8 @@ test('should handle reconnection', async (t) => {
   });
 
   await client.connect();
+  // Небольшая задержка чтобы соединение стабилизировалось
+  await new Promise((resolve) => setTimeout(resolve, 100));
   assert.strictEqual(client.isConnected(), true);
 
   // Simulate disconnection by closing connection manually
