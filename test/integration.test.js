@@ -79,11 +79,6 @@ test('should handle reconnection', async (t) => {
     maxReconnectAttempts: 3,
   });
 
-  let reconnected = false;
-  client.on('reconnect', () => {
-    reconnected = true;
-  });
-
   await client.connect();
   assert.strictEqual(client.isConnected(), true);
 

@@ -278,21 +278,11 @@ test('should get DLQ name with custom prefix', () => {
 // ==================== HOOKS ====================
 
 test('should support hooks configuration', () => {
-  let publishCalled = false;
-  let consumeCalled = false;
-  let errorCalled = false;
-
   const client = new RabbitMQClient('amqp://localhost', {
     hooks: {
-      onPublish: () => {
-        publishCalled = true;
-      },
-      onConsume: () => {
-        consumeCalled = true;
-      },
-      onError: () => {
-        errorCalled = true;
-      },
+      onPublish: () => {},
+      onConsume: () => {},
+      onError: () => {},
     },
   });
 
